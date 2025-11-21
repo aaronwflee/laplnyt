@@ -23,24 +23,21 @@ def get_stealth_driver():
     """Configures Chrome to look like a real human browser."""
     chrome_options = Options()
     
-    # "headless=new" is much harder to detect than the old "--headless"
+    # Use the new headless mode which is more robust
     chrome_options.add_argument("--headless=new") 
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--window-size=1920,1080")
     
-    # --- STEALTH FLAGS (The Secret Sauce) ---
-    # 1. Turn off the "AutomationControlled" feature which screams "I am a robot"
+    # Randomize window size slightly to avoid standard bot fingerprints
+    chrome_options.add_argument("--window-size=1366,768")
+    
+    # --- STEALTH FLAGS ---
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-    
-    # 2. Exclude the "enable-automation" switch that Selenium usually adds
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    
-    # 3. Turn off the automation extension
     chrome_options.add_experimental_option("useAutomationExtension", False)
     
-    # 4. Use a standard user agent
-    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+    # Use a highly standard, recent User Agent
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36")
 
     driver = webdriver.Chrome(
         service=Service(ChromeDriverManager().install()), 
@@ -50,7 +47,7 @@ def get_stealth_driver():
 
 def renew_pass():
     if not LIBRARY_CARD or not LIBRARY_PIN or not NYT_EMAIL:
-        logging.error("Missing credentials! Ensure LIBRARY_CARD, LIBRARY_PIN, and NYT_EMAIL are set in GitHub Secrets.")
+        logging.error("Missing credentials! Check GitHub Secrets.")
         return
 
     logging.info("Setting up Stealth Browser...")
@@ -70,41 +67,63 @@ def renew_pass():
         driver.find_element(By.XPATH, "//input[@type='submit'] | //button[contains(text(), 'Log In')]").click()
         logging.info("Submitted Library credentials.")
 
-        # --- PHASE 2: NYT INTERACTION ---
+        # --- PHASE 2: NYT AUTH HANDLING ---
         logging.info("Waiting for NYT page load (5s)...")
         time.sleep(5) 
         
+        # Check if we are on the landing page that asks for login
         body_text = driver.find_element(By.TAG_NAME, "body").text
 
-        # Check for 'Log in' text
         if "Already have an account? Log in" in body_text or "Log in" in body_text:
-            logging.info("NYT Login required. Starting NYT auth sequence...")
+            logging.info("NYT Login required. Finding login link...")
 
-            # 1. Click initial 'Log in' if needed
-            if "enter-email" not in driver.page_source:
-                try:
-                    login_link = driver.find_element(By.XPATH, "//a[contains(text(), 'Log in')] | //button[contains(text(), 'Log in')]")
-                    login_link.click()
-                    time.sleep(3)
-                except:
-                    logging.info("Already on login form or couldn't find link.")
-
-            # 2. Find Email Field (With Debugging)
-            logging.info("Looking for NYT Email field...")
+            # STRATEGY CHANGE: Get the URL and navigate directly
+            # This is safer than .click() which might hang on a redirect
+            login_url = None
             try:
-                # We try to find the email field. If this times out, it's likely a bot block.
-                email_input = wait.until(EC.presence_of_element_located((By.ID, "email")))
-                email_input.clear()
-                email_input.send_keys(NYT_EMAIL)
-                logging.info("Entered Email.")
-            except Exception as e:
-                # --- DEBUGGING BLOCK ---
-                logging.error("!!! COULD NOT FIND EMAIL FIELD !!!")
-                logging.error("Dumping page text to see if we were blocked:")
+                # Find the link element
+                login_link_elem = driver.find_element(By.XPATH, "//a[contains(text(), 'Log in')] | //button[contains(text(), 'Log in')]")
+                login_url = login_link_elem.get_attribute("href")
+            except:
+                logging.warning("Could not find Log In link element, checking if we are already redirected.")
+
+            if login_url:
+                logging.info(f"Navigating directly to Auth URL: {login_url[:50]}...")
+                driver.get(login_url)
+            else:
+                logging.info("No href found or already on page. Continuing.")
+
+            # --- EMAIL FIELD (WITH RETRY) ---
+            logging.info("Looking for NYT Email field...")
+            
+            email_field_found = False
+            for attempt in range(2): # Try twice
+                try:
+                    # Look for email by ID or Name
+                    email_input = wait.until(lambda d: d.find_element(By.ID, "email") or d.find_element(By.NAME, "email"))
+                    email_input.clear()
+                    email_input.send_keys(NYT_EMAIL)
+                    logging.info("Entered Email.")
+                    email_field_found = True
+                    break # Success, exit loop
+                except:
+                    if attempt == 0:
+                        logging.warning("Email field not found. Refreshing page to bypass blank screen...")
+                        driver.refresh()
+                        time.sleep(5) # Wait for reload
+                    else:
+                        logging.error("Refresh failed. Email field still missing.")
+
+            if not email_field_found:
+                # --- DEBUGGING CRITICAL FAILURE ---
+                logging.error("!!! FAILED TO FIND EMAIL FIELD !!!")
+                logging.error(f"Current URL: {driver.current_url}")
+                logging.error("Dumping HTML Source (first 2000 chars) to analyze block:")
                 print("="*30)
-                print(driver.find_element(By.TAG_NAME, "body").text[:1000]) # Print first 1000 chars
+                # print page_source to see hidden HTML or error messages
+                print(driver.page_source[:2000]) 
                 print("="*30)
-                raise e # Re-raise error to stop script
+                raise Exception("Email field missing - Automation detected or page failed to load.")
 
             # Click Continue (if exists)
             try:
@@ -114,31 +133,32 @@ def renew_pass():
             except:
                 pass 
 
-            # 3. Enter Password
+            # Enter Password
             pass_input = wait.until(EC.element_to_be_clickable((By.ID, "password")))
             pass_input.clear()
             pass_input.send_keys(NYT_PASSWORD)
 
-            # 4. Submit
+            # Submit
             submit_btn = driver.find_element(By.XPATH, "//button[@type='submit' or contains(text(), 'Log In')]")
             submit_btn.click()
             time.sleep(5)
 
         # --- PHASE 3: REDEMPTION ---
         logging.info("Checking for 'Redeem' button...")
-        body_text = driver.find_element(By.TAG_NAME, "body").text
-        
-        if "Redeem" in body_text:
-            try:
+        try:
+            # Re-fetch body text after login
+            body_text = driver.find_element(By.TAG_NAME, "body").text
+            
+            if "Redeem" in body_text:
                 driver.find_element(By.XPATH, "//button[contains(text(), 'Redeem')]").click()
                 logging.info("SUCCESS: Clicked 'Redeem'.")
-            except:
-                logging.info("Redeem button found but couldn't click.")
-        elif "You have a pass" in body_text or "Basic Digital Access" in body_text:
-            logging.info("SUCCESS: Pass is already active.")
-        else:
-            logging.info("Status unclear. Page text snippet:")
-            print(body_text[:300])
+            elif "You have a pass" in body_text or "Basic Digital Access" in body_text:
+                logging.info("SUCCESS: Pass is already active.")
+            else:
+                logging.info("Status unclear. Page text snippet:")
+                print(body_text[:300])
+        except Exception as e:
+            logging.warning(f"Error checking redemption status: {e}")
 
     except Exception as e:
         logging.error(f"Script Failed: {e}")
