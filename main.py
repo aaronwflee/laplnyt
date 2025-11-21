@@ -1,4 +1,5 @@
 import os
+import time
 import logging
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -61,7 +62,22 @@ def renew_pass():
         login_btn.click()
         logging.info("Clicked login...")
 
-        # Wait for the redirect to NYT
+        # --- DEBUGGING SECTION START ---
+        # We wait 5 seconds to let the next page load (whether it's an error or success)
+        logging.info("Waiting 5 seconds for page response...")
+        time.sleep(5)
+        
+        # Grab the body text of whatever page we are on now
+        body_text = driver.find_element(By.TAG_NAME, "body").text
+        
+        print("\n" + "="*30)
+        print(" PAGE TEXT DUMP (DEBUGGING) ")
+        print("="*30)
+        print(body_text)
+        print("="*30 + "\n")
+        # --- DEBUGGING SECTION END ---
+
+        # Wait for the redirect to NYT to verify success logic
         # We wait up to 10 seconds for the URL to change to something containing 'nytimes'
         wait.until(EC.url_contains("nytimes"))
         logging.info("Successfully redirected to NYT website.")
@@ -76,6 +92,8 @@ def renew_pass():
 
     except Exception as e:
         logging.error(f"Failed: {e}")
+        # If we failed, print the final URL to see where we got stuck
+        logging.info(f"Stuck on URL: {driver.current_url}")
         raise e
 
     finally:
