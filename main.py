@@ -131,6 +131,7 @@ def renew_pass():
 
         # --- PHASE 3: REDEMPTION ---
         logging.info("Checking for 'Redeem' button...")
+        print(body_text[:300])
         try:
             body_text = driver.find_element(By.TAG_NAME, "body").text
             if "Redeem" in body_text:
