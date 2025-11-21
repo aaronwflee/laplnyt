@@ -24,9 +24,8 @@ jobs:
 
       - name: Run Renewal Script
         env:
-          # We now pass 4 secrets instead of 2
+          # We must map the GitHub Secret to the Python Environment Variable here
           LIBRARY_CARD: ${{ secrets.LIBRARY_CARD }}
           LIBRARY_PIN: ${{ secrets.LIBRARY_PIN }}
-          NYT_EMAIL: ${{ secrets.NYT_EMAIL }}
-          NYT_PASSWORD: ${{ secrets.NYT_PASSWORD }}
+          NYT_COOKIE: ${{ secrets.NYT_COOKIE }}
         run: python main.py
