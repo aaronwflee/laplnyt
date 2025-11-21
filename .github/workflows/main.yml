@@ -2,10 +2,8 @@ name: Auto Renew NYT Pass
 
 on:
   schedule:
-    # Runs at 13:00 UTC every day (approx 6am Los Angeles time)
-    # You can change this using cron syntax
-    - cron: '0 13 * * *'
-  workflow_dispatch: # Allows you to click a button to run it manually for testing
+    - cron: '0 13 * * *' # Runs at 6am LA time
+  workflow_dispatch:
 
 jobs:
   renew-pass:
@@ -26,7 +24,9 @@ jobs:
 
       - name: Run Renewal Script
         env:
-          # These pull the safe variables from your repo settings
+          # We now pass 4 secrets instead of 2
           LIBRARY_CARD: ${{ secrets.LIBRARY_CARD }}
           LIBRARY_PIN: ${{ secrets.LIBRARY_PIN }}
+          NYT_EMAIL: ${{ secrets.NYT_EMAIL }}
+          NYT_PASSWORD: ${{ secrets.NYT_PASSWORD }}
         run: python main.py
