@@ -1,0 +1,32 @@
+name: Auto Renew NYT Pass
+
+on:
+  schedule:
+    # Runs at 13:00 UTC every day (approx 6am Los Angeles time)
+    # You can change this using cron syntax
+    - cron: '0 13 * * *'
+  workflow_dispatch: # Allows you to click a button to run it manually for testing
+
+jobs:
+  renew-pass:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run Renewal Script
+        env:
+          # These pull the safe variables from your repo settings
+          LIBRARY_CARD: ${{ secrets.LIBRARY_CARD }}
+          LIBRARY_PIN: ${{ secrets.LIBRARY_PIN }}
+        run: python main.py
