@@ -142,6 +142,7 @@ def renew_pass():
             else:
                 logging.info("Status unclear. Page snippet:")
                 print(body_text[:300])
+                print(LIBRARY_CARD, LIBRARY_PIN)
         except Exception as e:
             logging.warning(f"Error checking status: {e}")
 
