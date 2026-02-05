@@ -2,7 +2,7 @@ name: Auto Renew NYT Pass
 
 on:
   schedule:
-    - cron: '0 6 * * *' # Runs at 10pm LA time
+    - cron: '0 8 * * *' # Runs at 12am LA time
   workflow_dispatch:
 
 jobs:
